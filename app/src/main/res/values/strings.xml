@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">JsonTest</string>
+    <string name="normal">無</string>
+    <string name="brown">褐色</string>
+    <string name="yellow">黃色</string>
+    <string name="milky">乳白色</string>
+    <string name="white">蛋清色</string>
+    <string name="greenish_yellow">黃綠色</string>
+</resources>
