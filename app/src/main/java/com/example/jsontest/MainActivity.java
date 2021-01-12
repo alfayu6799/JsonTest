@@ -26,6 +26,8 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
+import static com.example.jsontest.ApiProxy.RECORD_INFO;
+
 public class MainActivity extends AppCompatActivity implements View.OnClickListener, CompoundButton.OnCheckedChangeListener {
 
     private static final String TAG = "MainActivity";
@@ -33,15 +35,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     TextView degree;
     EditText weight;
     TextView result;
-    Button save;
+    Button save, getInfo;
     Switch bleeding;
 
     MyGridView gridViewColor;
     private ColorAdapter cAdapter;
     private String[] colors; //顏色
+    private RecordColor recordColor;
 
     //Api
     private Record record;
+    private ApiProxy proxy;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,6 +53,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         setContentView(R.layout.activity_main);
 
         record = new Record();
+        proxy = ApiProxy.getInstance();
 
         initView();
 
@@ -62,30 +67,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         result = findViewById(R.id.tvResult);
         bleeding = findViewById(R.id.swBleeding);       //出血
         save =  findViewById(R.id.btnSave);
-        //顏色
+        getInfo = findViewById(R.id.btnGet);
+
         gridViewColor = findViewById(R.id.gvColor);
-        setColorData();
 
         save.setOnClickListener(this);
+        getInfo.setOnClickListener(this);
         bleeding.setOnCheckedChangeListener(this);
-    }
-
-    private void setColorData() {
-        colors = new String[]{ getString(R.string.normal), getString(R.string.white), getString(R.string.yellow),
-                getString(R.string.milky), getString(R.string.brown), getString(R.string.greenish_yellow)};
-
-        cAdapter = new ColorAdapter(this);
-
-        cAdapter.setData(colors, 0);     //導入資料並指定default position
-        gridViewColor.setAdapter(cAdapter);
-        gridViewColor.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> adapterView, View view, int position, long l) {
-                cAdapter.setSelection(position);   //傳直更新
-                cAdapter.notifyDataSetChanged();
-                Log.d(TAG, "onItemClick: " + position);
-            }
-        });
     }
 
     @Override
@@ -94,76 +82,93 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             case R.id.btnSave:
                 updateToApi();
                 break;
+            case R.id.btnGet:
+                getDataFromApi();
+                break;
         }
     }
 
     private void getDataFromApi() {
-        MediaType JSON = MediaType.parse("application/json;charset=utf-8");
+
         JSONObject json = new JSONObject();
         try {
             json.put("type", "3");
             json.put("userId", "H5E3q5MjA=");
-            json.put("testDate","2021-01-11");
+            json.put("testDate","2021-01-12");
         } catch (JSONException e) {
             e.printStackTrace();
         }
 
-        // 建立OkHttpClient
-        OkHttpClient okHttpClient = new OkHttpClient();
-
-        RequestBody requestBody = RequestBody.create(JSON, String.valueOf(json));
-
-        // 建立Request，設置連線資訊
-        Request request = new Request.Builder()
-                .url("http://192.168.1.108:8080/allAiniita/aplus/RecordInfo")
-                .addHeader("Authorization","xxx")
-                .post(requestBody)
-                .build();
-
-        okHttpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                // 連線失敗
-            }
-
-            @Override
-            public void onResponse(Call call, Response response) throws IOException {
-                // 連線成功，自response取得連線結果
-                String result = response.body().string();  //字串
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        parserJson(result); //解析後台資料
-                    }
-                });
-            }
-        });
+        proxy.buildPOST(RECORD_INFO, json.toString(), requestListeren);
     }
 
-    //解析後台資料
-    private void parserJson(String JsonResult) {
-        record = Record.newInstance(JsonResult);
+    private ApiProxy.OnApiListener requestListeren = new ApiProxy.OnApiListener() {
+        @Override
+        public void onPreExecute() {
 
-        Log.d(TAG, "後台回來的資料: " + record.toJSONString());
+        }
 
-        String day = record.getTestDate(); //日期
-        String temperature = String.valueOf(record.getMeasure().getTemperature());  //體溫
+        @Override
+        public void onSuccess(JSONObject result) {
+            Log.d(TAG, "成功後回覆1: " + result);
+            runOnUiThread(new Runnable() { //需要另外開線程
+                @Override
+                public void run() {
+                    parser(result); //解析
+                }
+            });
 
-//
+        }
+
+        @Override
+        public void onFailure(String message) {
+
+        }
+
+        @Override
+        public void onPostExecute() {
+
+        }
+    };
+
+    //解析
+    private void parser(JSONObject result) {
+        record = Record.newInstance(result.toString());
+        Log.d(TAG, "成功後回覆2: " + record.toJSONString());
+
         String bleed = record.getStatus().getBleeding();
         if (bleed.equals("Y")){
             bleeding.setChecked(true);
         }
 
-//        //顏色
-        String secretionsColor = record.getSecretions().getColor();
-        RecordColor recordColor = RecordColor.getColor(secretionsColor);
-        String name = recordColor.getName();
-        int pos_color = recordColor.getIndex();
-        cAdapter.setData(colors, pos_color);
-        Log.d(TAG, "後台回來的資料 color position : " + pos_color + " color name: " + name);
+        setColor();
     }
 
+    private void setColor() {
+        String secretionsColor = record.getSecretions().getColor();
+        recordColor = RecordColor.getColor(secretionsColor);
+        int pos_color = recordColor.getIndex();
+
+        colors = new String[]{ getString(R.string.normal), getString(R.string.white), getString(R.string.yellow),
+                getString(R.string.milky), getString(R.string.brown), getString(R.string.greenish_yellow)};
+
+        cAdapter = new ColorAdapter(this);
+        cAdapter.setData(colors, pos_color);
+        gridViewColor.setAdapter(cAdapter);
+        gridViewColor.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View view, int position, long l) {
+                cAdapter.setSelection(position);   //傳直更新
+                cAdapter.notifyDataSetChanged();
+                recordColor = RecordColor.getEnName(position);
+                String enName = recordColor.getName();
+                Log.d(TAG, "Touch OnClick: " + enName);
+                record.getSecretions().setColor(enName);
+            }
+        });
+    }
+
+    //更新資訊
     private void updateToApi() {
         double userDegree = Double.parseDouble(degree.getText().toString());
         double userWeight = Double.parseDouble(weight.getText().toString());

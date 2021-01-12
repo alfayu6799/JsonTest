@@ -6,4 +6,6 @@
     <string name="milky">乳白色</string>
     <string name="white">蛋清色</string>
     <string name="greenish_yellow">黃綠色</string>
+
+    <string name="api_unavailable">無法取得網路服務，請稍後再試</string>
 </resources>
